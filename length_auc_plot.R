@@ -4,15 +4,17 @@ source("make_datasets.R")
 source("make_models.R")
 
 ct = "CNhs11827"
-vars = c("nucl")
+vars = c("dexter")
 
 cts <- read.table("cell_types_plt.txt", h = F, sep = '\t')
 cts <- cts[-1]
 
+
+
 compare_auc_length <- function(vars){
   aucs <- c()
   sizes <- c()
-  for(ct in cts[30:100]){
+  for(ct in cts[1:100]){
     print(ct)
     data <- create_dataset(ct, vars)
     sizes = c(sizes, dim(data)[1])
@@ -23,7 +25,7 @@ compare_auc_length <- function(vars){
     glm <- model[[1]]
     variables <- model[[2]]
     auc = test_lasso_model(data_test=data_test, glm=glm, data_train=data_train, 
-                           variables = variables, vars = "nucleotides", ct=ct,
+                           variables = variables, vars = "dexter", ct=ct,
                            plot = F)
     aucs <- c(aucs, auc)
   }
@@ -32,17 +34,17 @@ compare_auc_length <- function(vars){
     geom_smooth(aes(x = x, y = y, colour = "Interpolation")) +
     xlab("size") + ylab("auc")  + theme(legend.position = c(0.8,1), legend.justification = c(0,1)) + 
     scale_color_manual(name = "Legend",values = c( "purple", "pink"))+ 
-    ggtitle("AUC depending on dataset size") 
+    ggtitle("AUC depending on dataset size, dexter model") 
 }
 
 compare_nucl_dexter <- function(){
   dexters <- c()
   dinucls <- c()
-  for(ct in cts[10:20]){
+  for(ct in cts[1:50]){
     print(ct)
     #Dexter model
     data <- create_dataset(ct, "dexter")
-    sets <- train_test_split(data)
+    sets <- train_test_split_order(data)
     data_train = sets[[1]]
     data_test = sets[[2]]
     model <- train_lasso_model(data_train)
@@ -55,7 +57,7 @@ compare_nucl_dexter <- function(){
     
     #Dinucleotide model
     data <- create_dataset(ct, "nucl")
-    sets <- train_test_split(data)
+    sets <- train_test_split_order(data)
     data_train = sets[[1]]
     data_test = sets[[2]]
     model <- train_lasso_model(data_train)

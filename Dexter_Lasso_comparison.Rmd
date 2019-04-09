@@ -1,0 +1,68 @@
+---
+title: "Dexter_Predictions"
+author: "Océane Cassan"
+date: "1 avril 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+setwd("~/DataFantom")
+library(gridExtra)
+source("make_datasets.R")
+source("make_models.R")
+```
+
+L'objectif est de voir si Dexter prédit mal les paires qui n'intéragissent pas, et bien celles qui sont en lien dans un type cellulaire en particulier.
+Tout d'abord, on construit le jeu de données pour le type cellulaire CNhs11889.
+Exécuter fasta_enhancers_regre_gene_expr.py puis pipeline_dexter_reg_gene_expr.py pour avoir les variables à partir des pairs.
+
+```{r data}
+#ct = "CNhs11889"
+
+
+get_cor <- function(int, ct){
+  if(int=="pos"){
+    dexter_vars_train_enh <- read.table(paste0("Dexter_results/Regression_gene_expr/", ct,"_pos/models/all_domains.dat_training_set.log.matrix"), h = T, sep = ' ')
+    dexter_vars_test_enh <- read.table(paste0("Dexter_results/Regression_gene_expr/",ct,"_pos/models/all_domains.dat_testing_set.log.matrix"), h = T, sep = ' ')
+  }
+  
+  if(int=="neg"){
+    dexter_vars_train_enh <- read.table(paste0("Dexter_results/Regression_gene_expr/", ct,"_neg/models/all_domains.dat_training_set.log.matrix"), h = T, sep = ' ')
+    dexter_vars_test_enh <- read.table(paste0("Dexter_results/Regression_gene_expr/",ct,"_neg/models/all_domains.dat_testing_set.log.matrix"), h = T, sep = ' ')
+  }
+  print('Dimensions du train : ')
+  print(dim())
+  row.names(dexter_vars_train_enh) = dexter_vars_train_enh$sequence
+  y_train <- dexter_vars_train_enh$expression
+  x_train <- dexter_vars_train_enh[ ,(names(dexter_vars_train_enh) != 'sequence' & names(dexter_vars_train_enh)!= "expression")]
+  
+  row.names(dexter_vars_test_enh) = dexter_vars_test_enh$sequence
+  y_test <- dexter_vars_test_enh$expression
+  x_test = dexter_vars_test_enh[ ,(names(dexter_vars_test_enh) != 'sequence' & names(dexter_vars_test_enh)!= "expression")]
+  
+  glm <- cv.glmnet(as.matrix(x_train), as.matrix(y_train), alpha = 1, family="gaussian", keep = T, nfolds = 10)
+  
+  pred <- as.numeric(predict(glm, as.matrix(x_test)))
+  errors <- abs(pred-y_test)
+  return(list(cor(pred, y_test), errors))
+}
+
+cor_pos = c()
+cor_neg = c()
+for(ct in cts[13:20]){
+  poss <- get_cor("pos", ct)
+  negs <- get_cor("neg", ct)
+  cor_pos = c(cor_pos, poss[[1]])
+  cor_neg = c(cor_neg, negs[[1]])
+  png(paste0('Figures/Dexter_reg_error/errors_',ct,'.png'))
+  hist(as.vector(poss[[2]]), col = rgb(0,1,0,0.3), main = 'Dexter regression error for positive and negative pairs', xlab = 'error')
+  hist(as.vector(negs[[2]]), add = T, col = rgb(1,0,0,0.3))
+  dev.off()
+}
+
+hist(cor_pos, col = rgb(0,1,0,0.3), main = 'Dexter correlations for positive and negative pairs', xlab = 'error', xlim = c(-0.2,0.6))
+hist(cor_neg, add = T, col = rgb(1,0,0,0.3))
+```
+

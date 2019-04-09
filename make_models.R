@@ -7,7 +7,6 @@ train_lasso_model <- function(data_train, sequences = 'ep', distance = T){
   
   variables <- names(data_train)[which(names(data_train)!="interaction" & names(data_train)!="pairs" & names(data_train)!="chr"
                                  & names(data_train)!="position")]
-  print(variables)
   if(sequences=='e'){
     variables <- variables[!grepl('P_', variables)]
   }
@@ -45,7 +44,7 @@ test_lasso_model <- function(data_test, glm, data_train, variables, vars = "nucl
     load("Data/unique_annot_ct.RData")
     curve = apply(as.matrix(seq(from = 0, by = 0.005, to = 1)),1, positivesrates, d = data_test, pred = pred)
     roc <- data.frame(x = curve[2,], y = curve[1,])
-    a <- ggplot(data = roc, aes(x = x, y = y))+ geom_line(aes(colour = paste0("Model with ",vars, " AUC : ", round(auc,3)))) + 
+    a <- ggplot(data = roc, aes(x = x, y = y))+ geom_line(aes(colour = paste0("AUC : ", round(auc,3), vars))) + 
       geom_line(aes(x = seq(0,1,by = 1/(dim(roc)[1]-1)), y = seq(0,1,by =  1/(dim(roc)[1]-1)),colour = "Random")) + 
       xlab("FP rate") + ylab("TP rate")  + theme(legend.position = c(0.6,0.3), legend.justification = c(0,1)) + 
       scale_color_manual(name = "Legend",values = c( "purple", "black"))+ 

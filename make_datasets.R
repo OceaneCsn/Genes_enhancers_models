@@ -3,24 +3,25 @@ library(stringr)
 setwd("~/DataFantom")
 options(stringsAsFactors=F)
 
-create_dataset <- function(ct, variables = c("nucl")){
+create_dataset <- function(ct, variables = c("nucl"), pos_type = '11', pairs_folder = "EG_pairs"){
   nb_nucl = 2
   vars = c()
-  
+  print("Loading des variables pour ce type cellulaire")
   #Jeu de données comprenant les paires enhancers-TSS positives et négatives
-  pairs = read.table(paste0("EG_pairs/EG_pairs_", ct, ".txt"), sep = ';', h = T)
-  
+  print(paste0(pairs_folder, "/EG_pairs_", ct, ".txt"))
+  pairs = read.table(paste0(pairs_folder, "/EG_pairs_", ct, ".txt"), sep = ';', h = T)
+  print('ok')
   if("nucl" %in% variables){
     # Variables de composition nucléotidiques pour les enhancers
-    quadri_enhancers = read.table(paste0("Compo_nucleo_enhancers/enhancers_", ct, "_", as.character(nb_nucl),".txt"), sep = ';', h = T, na.strings="")
-    headers = read.table(paste0("Compo_nucleo_enhancers/enhancers_", ct, "_", as.character(nb_nucl), ".txt"), sep = ';', h = F, na.strings="")[1,]
+    quadri_enhancers = read.table(paste0("Compo_nucleo_enhancers/enhancers_", ct, "_", as.character(nb_nucl),"_",pos_type,".txt"), sep = ';', h = T, na.strings="")
+    headers = read.table(paste0("Compo_nucleo_enhancers/enhancers_", ct, "_", as.character(nb_nucl), "_",pos_type,".txt"), sep = ';', h = F, na.strings="")[1,]
     row.names(quadri_enhancers) = quadri_enhancers$X
     quadri_enhancers = quadri_enhancers[ ,(names(quadri_enhancers) != 'X')]
     colnames(quadri_enhancers) <- headers[2:length(headers)]
     
     # Variables de composition nucléotidiques pour les TSS
-    quadri_proms = read.table(paste0("Compo_nucleo_promoters/genes_", ct, "_", as.character(nb_nucl),".txt"), sep = ';', h = T, na.strings="")
-    headers = read.table(paste0("Compo_nucleo_promoters/genes_", ct, "_", as.character(nb_nucl), ".txt"), sep = ';', h = F, na.strings="")[1,]
+    quadri_proms = read.table(paste0("Compo_nucleo_promoters/genes_", ct, "_", as.character(nb_nucl),"_",pos_type,".txt"), sep = ';', h = T, na.strings="")
+    headers = read.table(paste0("Compo_nucleo_promoters/genes_", ct, "_", as.character(nb_nucl), "_",pos_type,".txt"), sep = ';', h = F, na.strings="")[1,]
     row.names(quadri_proms) = quadri_proms$X
     
     quadri_proms = quadri_proms[ ,(names(quadri_proms) != 'X')]
@@ -57,7 +58,7 @@ create_dataset <- function(ct, variables = c("nucl")){
     pwm_ct_proms <- pwm_proms[,names(pwm_proms) %in% pairs$Gene]
     vars = c(vars, paste0("P_", rownames(pwm_ct_proms)))
   }
-  
+  print("Construction du de données avec les variables demandées ")
   #construction de la matrice
   cols = c("pairs", vars, "chr", "position", "distance", "interaction")
   data = data.frame(matrix(ncol = length(cols), nrow = dim(pairs)[1]))
@@ -90,7 +91,7 @@ create_dataset <- function(ct, variables = c("nucl")){
   return(data)
 }
 
-overlapping_enh <- function(enh, others, already_overlapping, result){
+overlapping_enh <- function(enh, others, already_overlapping, result, rec = T){
   #recursive function to return all the overlapping enhancers of enh, ang all their overlapping ones
   start = as.numeric(str_split_fixed(str_split_fixed(enh, '-', 2)[,1], ':', 2)[,2])
   end = as.numeric(str_split_fixed(enh, '-', 2)[,2])
@@ -99,6 +100,11 @@ overlapping_enh <- function(enh, others, already_overlapping, result){
   res = c()
   overlapping_end = others[starts <= end & starts >= start]
   overlapping_start = others[ends >= start & ends <= end]
+  
+  if(!rec){
+    return(union(overlapping_start, overlapping_end))
+  }
+  
   already_overlapping = c(already_overlapping, enh)
   to_search = union(overlapping_start, overlapping_end)
   to_search = to_search[!to_search %in% already_overlapping]
@@ -113,10 +119,10 @@ overlapping_enh <- function(enh, others, already_overlapping, result){
   return(unique(result))
 }
 
+
 train_test_split_order <- function(data){
   #Separate training set and evaluation set
   data <- data[order(data$pairs),]
-  
   data_train <- data[1:round(dim(data)[1]*4/5),]
   data_test <- data[which(!rownames(data) %in% rownames(data_train)),]
   
@@ -151,6 +157,40 @@ train_test_split <- function(data){
   }
   data_test <- data[test_pairs,]
   data_train <- data[!rownames(data) %in% rownames(data_test),]
+  return(list(data_train, data_test))
+}
+
+train_test_split_variation <- function(data, frac = 1/5, delete_inter = T){
+  #Separate training set and evaluation set
+  data <- data[order(data$pairs),]
+  test_pairs = c()
+  for (chr in unique(data$chr)){
+    data_chr <- data[data$chr == chr,]
+    i_min = sample(1:round(1/frac,1)-1, size = 1)
+    i_max = i_min + 1
+    index_min = round(length(data_chr$chr)*i_min*frac)
+    index_max = round(length(data_chr$chr)*i_max*frac)
+    test_pairs = c(test_pairs, data_chr$pairs[index_min:index_max])
+  }
+  data_test <- data[test_pairs,]
+  data_train <- data[!rownames(data) %in% rownames(data_test),]
+  
+  if(delete_inter){
+    for(prom in(str_split_fixed(data_test$pairs, '/', 2)[,2])){
+      #deleting the test promoters rom the train set 
+      data_train = data_train[!grepl(prom, data_train$pairs),]
+    }
+    for(enh in (str_split_fixed(data_test$pairs, '/', 2)[,1])){
+      
+      chr = str_split_fixed(enh, ':', 2)[,1]
+      others = data_test[data_test$chr == chr,]
+      others = str_split_fixed(others$pairs, '/', 2)[,1]
+      for(ov_enh in overlapping_enh(enh, rec = F, others = others)){
+        data_train = data_train[!grepl(ov_enh, data_train$pairs),]
+      }
+    }
+  }
+  
   return(list(data_train, data_test))
 }
 
